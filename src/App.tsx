@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { Search, UserCog, Scale, Menu } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import AdminPanel from './components/AdminPanel';
+import axios from 'axios';
 
 interface LawResult {
   title: string;
   description: string;
   category: string;
+}
+
+interface NewsItem {
+  id: string;
+  title: string;
+  description: string;
 }
 
 function SearchPage() {
@@ -15,6 +21,11 @@ function SearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([
+    { id: '1', title: 'New Law Enforced', description: 'Details about a new law enforcement.' },
+    { id: '2', title: 'Update on Civil Law', description: 'Civil law updated this week.' },
+    { id: '3', title: 'Constitutional Law Changes', description: 'Constitutional law changes announced.' },
+  ]);
 
   const filters = [
     { id: 'all', label: 'All Laws' },
@@ -26,22 +37,16 @@ function SearchPage() {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-    
+
     setIsLoading(true);
     try {
-      // Simulated API call
-      setSearchResults([
-        { 
-          title: "Civil Code 2074",
-          description: "This law covers civil matters including property, contracts, and family law.",
-          category: "civil"
-        },
-        {
-          title: "Criminal Code 2074",
-          description: "This code deals with criminal offenses and their punishments in Nepal.",
-          category: "criminal"
-        }
-      ]);
+      const response = await axios.get('http://localhost:5000/api/laws', {
+        params: { category: searchQuery },
+      });
+
+      console.log('API Response:', response.data); // Add this line to log the response
+
+      setSearchResults(response.data);
     } catch (error) {
       console.error('Search failed:', error);
     } finally {
@@ -49,8 +54,20 @@ function SearchPage() {
     }
   };
 
-  const filteredResults = activeFilter === 'all' 
-    ? searchResults 
+  const handleDeleteNews = (id: string) => {
+    setNewsItems(newsItems.filter(news => news.id !== id));
+  };
+
+  const handleEditNews = (id: string, updatedTitle: string, updatedDescription: string) => {
+    setNewsItems(newsItems.map(news =>
+      news.id === id
+        ? { ...news, title: updatedTitle, description: updatedDescription }
+        : news
+    ));
+  };
+
+  const filteredResults = activeFilter === 'all'
+    ? searchResults
     : searchResults.filter(result => result.category === activeFilter);
 
   return (
@@ -62,7 +79,7 @@ function SearchPage() {
               <Scale size={32} className="text-blue-600" />
               <span className="text-xl font-bold text-gray-800">Nepal Legal Search</span>
             </div>
-            
+
             {/* Desktop Navigation */}
             <div className="hidden md:flex space-x-4">
               {filters.map(filter => (
@@ -79,7 +96,7 @@ function SearchPage() {
                 </button>
               ))}
             </div>
-            
+
             <div className="flex items-center gap-4">
               <Link
                 to="/admin"
@@ -88,9 +105,9 @@ function SearchPage() {
                 <UserCog size={20} />
                 Admin
               </Link>
-              
+
               {/* Mobile menu button */}
-              <button 
+              <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                 className="md:hidden p-2 text-gray-600 hover:text-blue-600"
               >
@@ -131,6 +148,23 @@ function SearchPage() {
           )}
         </div>
       </nav>
+
+      {/* News Section */}
+      <div className="bg-gray-100 py-4">
+        <div className="overflow-hidden whitespace-nowrap">
+          <div className="flex animate-marquee space-x-8">
+            {newsItems.map(news => (
+              <div key={news.id} className="bg-white p-4 rounded-lg shadow-sm flex-none min-w-[300px] mr-6">
+                <h3 className="font-semibold text-lg">{news.title}</h3>
+                <p className="text-sm">{news.description}</p>
+                <div className="flex mt-2 space-x-4">
+                  
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <div className="max-w-6xl mx-auto px-4 py-8 md:py-12">
         <div className="text-center mb-8 md:mb-12">
@@ -195,6 +229,16 @@ function SearchPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function AdminPanel() {
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-8">
+      <h1 className="text-3xl font-semibold text-gray-800 mb-6">Admin Panel</h1>
+      <p className="text-gray-600">Manage news and settings here.</p>
+      {/* Add admin panel content here */}
     </div>
   );
 }

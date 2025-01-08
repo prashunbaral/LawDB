@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Plus, Pencil, Trash2 } from 'lucide-react';
+import axios from 'axios';
 
 interface Law {
   id: string;
@@ -13,46 +14,79 @@ export default function AdminPanel() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [laws, setLaws] = useState<Law[]>([
-    {
-      id: '1',
-      title: 'Civil Code 2074',
-      description: 'This law covers civil matters including property, contracts, and family law.',
-      category: 'civil'
-    },
-    {
-      id: '2',
-      title: 'Criminal Code 2074',
-      description: 'This code deals with criminal offenses and their punishments in Nepal.',
-      category: 'criminal'
-    }
-  ]);
+  const [laws, setLaws] = useState<Law[]>([]);
   const [editingLaw, setEditingLaw] = useState<Law | null>(null);
+  const [newLaw, setNewLaw] = useState<Law>({
+    id: '',
+    title: '',
+    description: '',
+    category: 'civil'
+  });
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Fetch laws from the backend
+  const fetchLaws = async () => {
+    try {
+      const response = await axios.get('http://localhost:5000/api/laws');
+      setLaws(response.data);
+    } catch (error) {
+      console.error('Failed to fetch laws:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchLaws();
+    }
+  }, [isLoggedIn]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Add proper authentication here
+    // Implement authentication logic (e.g., API call for login)
     if (username === 'admin' && password === 'admin') {
       setIsLoggedIn(true);
     }
   };
 
-  const handleDelete = (id: string) => {
-    setLaws(laws.filter(law => law.id !== id));
+  const handleAddLaw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLaw.title || !newLaw.description) return;
+  
+    console.log('Adding new law:', newLaw);  // Log the request body
+  
+    try {
+      const response = await axios.post('http://localhost:5000/api/laws', newLaw);
+      setLaws([...laws, response.data]);
+      setNewLaw({ id: '', title: '', description: '', category: 'civil' }); // Reset form
+    } catch (error) {
+      console.error('Failed to add law:', error);
+    }
+  };
+  
+
+  const handleDelete = async (id: string) => {
+    try {
+      await axios.delete(`http://localhost:5000/api/laws/${id}`);
+      setLaws(laws.filter(law => law.id !== id));
+    } catch (error) {
+      console.error('Failed to delete law:', error);
+    }
   };
 
   const handleEdit = (law: Law) => {
     setEditingLaw(law);
   };
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingLaw) return;
 
-    setLaws(laws.map(law => 
-      law.id === editingLaw.id ? editingLaw : law
-    ));
-    setEditingLaw(null);
+    try {
+      const response = await axios.put(`http://localhost:5000/api/laws/${editingLaw.id}`, editingLaw);
+      setLaws(laws.map(law => (law.id === editingLaw.id ? response.data : law)));
+      setEditingLaw(null); // Close the edit form
+    } catch (error) {
+      console.error('Failed to update law:', error);
+    }
   };
 
   if (!isLoggedIn) {
@@ -106,24 +140,32 @@ export default function AdminPanel() {
 
         <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Add New Law</h2>
-          <form className="space-y-4">
+          <form onSubmit={handleAddLaw} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">Title</label>
               <input
                 type="text"
+                value={newLaw.title}
+                onChange={(e) => setNewLaw({ ...newLaw, title: e.target.value })}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Description</label>
               <textarea
+                value={newLaw.description}
+                onChange={(e) => setNewLaw({ ...newLaw, description: e.target.value })}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                 rows={3}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Category</label>
-              <select className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+              <select
+                value={newLaw.category}
+                onChange={(e) => setNewLaw({ ...newLaw, category: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+              >
                 <option value="civil">Civil Laws</option>
                 <option value="criminal">Criminal Laws</option>
                 <option value="constitutional">Constitutional</option>
@@ -183,7 +225,9 @@ export default function AdminPanel() {
                   <input
                     type="text"
                     value={editingLaw.title}
-                    onChange={(e) => setEditingLaw({ ...editingLaw, title: e.target.value })}
+                    onChange={(e) =>
+                      setEditingLaw({ ...editingLaw, title: e.target.value })
+                    }
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                   />
                 </div>
@@ -191,7 +235,9 @@ export default function AdminPanel() {
                   <label className="block text-sm font-medium text-gray-700">Description</label>
                   <textarea
                     value={editingLaw.description}
-                    onChange={(e) => setEditingLaw({ ...editingLaw, description: e.target.value })}
+                    onChange={(e) =>
+                      setEditingLaw({ ...editingLaw, description: e.target.value })
+                    }
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                     rows={3}
                   />
@@ -200,7 +246,9 @@ export default function AdminPanel() {
                   <label className="block text-sm font-medium text-gray-700">Category</label>
                   <select
                     value={editingLaw.category}
-                    onChange={(e) => setEditingLaw({ ...editingLaw, category: e.target.value })}
+                    onChange={(e) =>
+                      setEditingLaw({ ...editingLaw, category: e.target.value })
+                    }
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                   >
                     <option value="civil">Civil Laws</option>
@@ -209,21 +257,13 @@ export default function AdminPanel() {
                     <option value="commercial">Commercial</option>
                   </select>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700"
-                  >
-                    Update
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingLaw(null)}
-                    className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="flex items-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700"
+                >
+                  <Plus size={20} />
+                  Update Law
+                </button>
               </form>
             </div>
           </div>
