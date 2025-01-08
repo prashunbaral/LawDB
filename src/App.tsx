@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Search, UserCog, Scale, Menu } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import axios from 'axios';
+import AdminPanel from './components/AdminPanel';
+
 
 interface LawResult {
   title: string;
@@ -229,16 +231,6 @@ function SearchPage() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function AdminPanel() {
-  return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-semibold text-gray-800 mb-6">Admin Panel</h1>
-      <p className="text-gray-600">Manage news and settings here.</p>
-      {/* Add admin panel content here */}
     </div>
   );
 }
