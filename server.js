@@ -73,31 +73,56 @@ const getLaws = async (query, category) => {
   }
 };
 
+// Get a single law by ID
+app.get('/api/laws/:id', async (req, res) => {
+  const { id } = req.params;
+  let law = null;
+  try {
+    law = await Law.findOne({ law_id: Number(id) });
+    if (!law) {
+      law = await Law.findOne({ law_id: id });
+    }
+    if (!law) {
+      return res.status(404).json({ message: 'Law not found' });
+    }
+    return res.status(200).json(law);
+  } catch (err) {
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Get all laws with optional search and category filter
 app.get('/api/laws', async (req, res) => {
     const { query = "", category = "" } = req.query;
-    console.log('Received query:', query);  // Log the query parameter
-    console.log('Received category:', category);  // Log the category parameter
+    console.log('Received query:', query);
+    console.log('Received category:', category);
   
     try {
-      // Create search query for title and category
-      const searchQuery = {
-        title: { $regex: query, $options: 'i' }, // Case-insensitive regex search on title
-        category: { $regex: category, $options: 'i' }
-      };
+      let searchQuery = {};
+      
+      // If there's a search query, search in both title and description
+      if (query) {
+        searchQuery = {
+          $or: [
+            { title: { $regex: query, $options: 'i' } },
+            { description: { $regex: query, $options: 'i' } }
+          ]
+        };
+      }
+      
+      // If there's a category filter, add it to the search query
+      if (category && category !== 'all') {
+        searchQuery = {
+          ...searchQuery,
+          category: { $regex: category, $options: 'i' }
+        };
+      }
   
-      // If query or category is empty, remove those filters
-      if (!query) delete searchQuery.title;
-      if (!category) delete searchQuery.category;
-  
-      console.log('MongoDB search query:', searchQuery);  // Log the actual search query
+      console.log('MongoDB search query:', searchQuery);
   
       // Query MongoDB with the constructed searchQuery
       const laws = await Law.find(searchQuery);
-      console.log('Laws found with search query:', laws);  // Log the laws returned from the query
-  
-      if (laws.length === 0) {
-        return res.status(404).json({ message: 'No laws found' });
-      }
+      console.log('Laws found with search query:', laws);
   
       res.json(laws);
     } catch (err) {
