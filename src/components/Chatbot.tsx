@@ -2,17 +2,45 @@ import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
-const GEMINI_API_KEY = 'AIzaSyDvlKkCl9oXKQASLsXYn4BhrJI2u4jyc-c';
-
 const CATEGORIES = ['constitutional', 'civil', 'criminal', 'commercial', 'corporate'];
 
+// Common greetings in English and Nepali
+const GREETINGS = [
+  'hi', 'hello', 'hey', 'namaste', 'namaskar', 'good morning', 'good afternoon', 'good evening',
+  'नमस्ते', 'नमस्कार', 'हाइ', 'हेलो'
+];
+
+function isGreeting(text: string): boolean {
+  const lowerText = text.toLowerCase().trim();
+  return GREETINGS.some(greeting => lowerText === greeting);
+}
+
 function extractCategory(prompt: string): string | null {
-  // Look for a known category in the prompt
   const lower = prompt.toLowerCase();
   for (const cat of CATEGORIES) {
     if (lower.includes(cat)) return cat;
   }
   return null;
+}
+
+function extractLawKeywords(prompt: string): string[] {
+  // Common legal terms and keywords in both English and Nepali
+  const legalTerms = [
+    // English terms
+    'law', 'legal', 'rights', 'court', 'judge', 'case', 'trial', 'evidence',
+    'contract', 'agreement', 'property', 'crime', 'criminal', 'civil', 'constitutional',
+    'commercial', 'corporate', 'tax', 'family', 'marriage', 'divorce', 'inheritance',
+    'property', 'business', 'company', 'employment', 'labor', 'intellectual', 'patent',
+    'copyright', 'trademark', 'accident', 'injury', 'damage', 'compensation',
+    // Nepali terms
+    'कानुन', 'कानून', 'ऐन', 'कानुनी', 'अधिकार', 'अदालत', 'न्याय', 'मुद्दा',
+    'सबूत', 'सम्झौता', 'सम्पत्ति', 'अपराध', 'दीवानी', 'संवैधानिक', 'व्यावसायिक',
+    'कम्पनी', 'रोजगार', 'श्रम', 'बौद्धिक', 'पेटेन्ट', 'कपिराइट', 'ट्रेडमार्क',
+    'दुर्घटना', 'चोट', 'क्षति', 'मुआवजा', 'ढाँचा', 'संरचना', 'निर्माण'
+  ];
+
+  const words = prompt.toLowerCase().split(/\s+/);
+  return words.filter(word => legalTerms.includes(word));
 }
 
 export default function Chatbot() {
@@ -23,47 +51,103 @@ export default function Chatbot() {
   const navigate = useNavigate();
   const overlayRef = useRef<HTMLDivElement>(null);
 
+  const searchLaws = async (query: string, category?: string) => {
+    try {
+      console.log('Searching laws with query:', query, 'category:', category);
+      const response = await axios.get('http://localhost:5000/api/laws', {
+        params: { 
+          query: query,
+          category: category?.toLowerCase()
+        }
+      });
+      console.log('Search results:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error searching laws:', error);
+      return [];
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
+    
     const userMsg = { sender: 'user' as const, text: input };
     setMessages((msgs) => [...msgs, userMsg]);
     setInput('');
     setLoading(true);
 
-    // Extract category from prompt
-    const category = extractCategory(userMsg.text);
-    if (!category) {
-      setMessages((msgs) => [
-        ...msgs,
-        { sender: 'ai', text: 'Please specify a valid law category: constitutional, civil, criminal, commercial, or corporate.' },
-      ]);
-      setLoading(false);
-      return;
-    }
     try {
-      const res = await axios.get('http://localhost:5000/api/laws', { params: { category } });
-      if (res.data && res.data.length > 0) {
+      // Check for greetings first
+      if (isGreeting(userMsg.text)) {
         setMessages((msgs) => [
           ...msgs,
           {
             sender: 'ai',
-            text: `Here ${res.data.length === 1 ? 'is' : 'are'} ${category} law${res.data.length === 1 ? '' : 's'}:`,
-            laws: res.data,
-          },
+            text: "नमस्ते! म तपाईंलाई कानुन सम्बन्धी जानकारी दिन मद्दत गर्न सक्छु। कृपया कुन कानुनको बारेमा जान्न चाहनुहुन्छ?"
+          }
         ]);
-      } else {
-        setMessages((msgs) => [
-          ...msgs,
-          { sender: 'ai', text: `Sorry, I couldn't find any ${category} laws.` },
-        ]);
+        setLoading(false);
+        return;
       }
-    } catch (err) {
+
+      // Extract category and keywords
+      const category = extractCategory(userMsg.text);
+      const keywords = extractLawKeywords(userMsg.text);
+      let relevantLaws = [];
+      let responseText = '';
+
+      // First try category search
+      if (category) {
+        console.log('Searching by category:', category);
+        relevantLaws = await searchLaws('', category);
+        if (relevantLaws.length > 0) {
+          responseText = `Here are the ${category} laws in our database:`;
+        }
+      }
+
+      // If no results from category search, try keyword search
+      if (relevantLaws.length === 0 && keywords.length > 0) {
+        console.log('Searching by keywords:', keywords);
+        relevantLaws = await searchLaws(keywords.join(' '));
+        if (relevantLaws.length > 0) {
+          responseText = `Here are the laws related to ${keywords.join(', ')}:`;
+        }
+      }
+
+      // If still no results, try searching with the original query
+      if (relevantLaws.length === 0) {
+        console.log('Searching with original query:', userMsg.text);
+        relevantLaws = await searchLaws(userMsg.text);
+        if (relevantLaws.length > 0) {
+          responseText = `Here are the laws related to your query:`;
+        }
+      }
+
+      // If no laws found at all
+      if (relevantLaws.length === 0) {
+        responseText = "माफ गर्नुहोस्, तपाईंको खोजीमा कुनै कानुन भेटिएन। कृपया अर्को खोजी शब्द वा श्रेणी प्रयोग गर्नुहोस्।";
+      }
+
       setMessages((msgs) => [
         ...msgs,
-        { sender: 'ai', text: 'There was an error searching for laws.' },
+        {
+          sender: 'ai',
+          text: responseText,
+          laws: relevantLaws
+        }
       ]);
+    } catch (error) {
+      console.error('Error in handleSend:', error);
+      setMessages((msgs) => [
+        ...msgs,
+        { 
+          sender: 'ai', 
+          text: "माफ गर्नुहोस्, केही समस्या भयो। कृपया पुन: प्रयास गर्नुहोस्।" 
+        }
+      ]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleLawClick = (lawId: number) => {
@@ -71,7 +155,6 @@ export default function Chatbot() {
     navigate(`/law/${lawId}`);
   };
 
-  // Overlay close on outside click
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === overlayRef.current) setOpen(false);
   };
@@ -104,7 +187,7 @@ export default function Chatbot() {
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M8 15s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" /></svg>
       </button>
 
-      {/* Overlay */}
+      {/* Chat overlay */}
       {open && (
         <div
           ref={overlayRef}
@@ -139,8 +222,9 @@ export default function Chatbot() {
               AI Law Assistant
               <button onClick={() => setOpen(false)} style={{ float: 'right', background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#888' }}>&times;</button>
             </div>
+
             {/* Messages */}
-            <div style={{ flex: 1, padding: 16, overflowY: 'auto', background: '#f9fafb' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
               {messages.map((msg, i) => (
                 <div key={i} style={{ marginBottom: 16, textAlign: msg.sender === 'user' ? 'right' : 'left' }}>
                   <div style={{
@@ -151,11 +235,12 @@ export default function Chatbot() {
                     padding: '10px 16px',
                     maxWidth: 240,
                     wordBreak: 'break-word',
+                    whiteSpace: 'pre-wrap'
                   }}>
                     {msg.text}
                   </div>
                   {/* Law links */}
-                  {msg.laws && (
+                  {msg.laws && msg.laws.length > 0 && (
                     <ul style={{ margin: '8px 0 0 0', padding: 0, listStyle: 'none' }}>
                       {msg.laws.map(law => (
                         <li key={law.law_id}>
@@ -180,8 +265,9 @@ export default function Chatbot() {
                   )}
                 </div>
               ))}
-              {loading && <div style={{ color: '#888', fontSize: 14 }}>Thinking...</div>}
+              {loading && <div style={{ color: '#888', fontSize: 14 }}>Searching laws...</div>}
             </div>
+
             {/* Input */}
             <form
               onSubmit={e => { e.preventDefault(); handleSend(); }}
@@ -191,7 +277,7 @@ export default function Chatbot() {
                 type="text"
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder="Ask about a law..."
+                placeholder="Search laws by category or keywords..."
                 style={{ flex: 1, border: 'none', outline: 'none', padding: 16, fontSize: 16, background: 'transparent' }}
                 disabled={loading}
               />

@@ -12,25 +12,47 @@ const port = 5000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// MongoDB connection
+// MongoDB connection with enhanced options
 mongoose.connect('mongodb+srv://pram15karki:DSSUJttfiBLkY96b@cluster0.svtnj.mongodb.net/nepal_law', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
 })
-  .then(() => {
-    console.log('MongoDB Connected');
-  })
-  .catch(err => {
-    console.error('Error connecting to MongoDB:', err);
-  });
+.then(() => {
+  console.log('MongoDB Connected Successfully');
+})
+.catch(err => {
+  console.error('MongoDB Connection Error:', err);
+  process.exit(1);
+});
 
-// Define the schema for the "laws" collection
+// Define the schema for the "laws" collection with validation
 const lawSchema = new mongoose.Schema({
-  law_id: Number,
-  title: String,
-  description: String,
-  category: String,
-}, { collection: 'laws' });
+  law_id: {
+    type: Number,
+    required: true,
+    unique: true
+  },
+  title: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  description: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  category: {
+    type: String,
+    required: true,
+    enum: ['civil', 'criminal', 'constitutional', 'commercial']
+  }
+}, { 
+  collection: 'laws',
+  timestamps: true 
+});
 
 // Create a Mongoose model for laws
 const Law = mongoose.model('Law', lawSchema);
@@ -100,22 +122,17 @@ app.get('/api/laws', async (req, res) => {
     try {
       let searchQuery = {};
       
-      // If there's a search query, search in both title and description
-      if (query) {
-        searchQuery = {
-          $or: [
-            { title: { $regex: query, $options: 'i' } },
-            { description: { $regex: query, $options: 'i' } }
-          ]
-        };
-      }
-      
       // If there's a category filter, add it to the search query
       if (category && category !== 'all') {
-        searchQuery = {
-          ...searchQuery,
-          category: { $regex: category, $options: 'i' }
-        };
+        searchQuery.category = category.toLowerCase();
+      }
+      
+      // If there's a search query, search in both title and description
+      if (query) {
+        searchQuery.$or = [
+          { title: { $regex: query, $options: 'i' } },
+          { description: { $regex: query, $options: 'i' } }
+        ];
       }
   
       console.log('MongoDB search query:', searchQuery);
@@ -155,43 +172,99 @@ app.post('/api/laws', async (req, res) => {
 
 // Update an existing law
 app.put('/api/laws/:id', async (req, res) => {
-  const { id } = req.params;
-  const { law_id, title, description, category } = req.body;
-
-  if (!law_id || !title || !description || !category) {
-    return res.status(400).json({ message: 'All fields are required' });
-  }
-
   try {
-    const updatedLaw = await Law.findByIdAndUpdate(
-      id,
-      { law_id, title, description, category },
-      { new: true }
-    );
-    if (!updatedLaw) {
+    const { id } = req.params;
+    const { title, description, category } = req.body;
+
+    // Convert id to number
+    const lawId = parseInt(id, 10);
+    if (isNaN(lawId)) {
+      return res.status(400).json({ message: 'Invalid law ID' });
+    }
+
+    // Find the law first
+    const existingLaw = await Law.findOne({ law_id: lawId });
+    if (!existingLaw) {
       return res.status(404).json({ message: 'Law not found' });
     }
+
+    // Update the law
+    existingLaw.title = title;
+    existingLaw.description = description;
+    existingLaw.category = category;
+
+    // Save the updated law
+    const updatedLaw = await existingLaw.save();
+    console.log('Successfully updated law:', updatedLaw);
     res.json(updatedLaw);
   } catch (err) {
     console.error('Error updating law:', err);
-    res.status(500).send('Server error');
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
-// Delete a law
+// Delete a law with enhanced error handling
 app.delete('/api/laws/:id', async (req, res) => {
-  const { id } = req.params;
-
   try {
-    const deletedLaw = await Law.findByIdAndDelete(id);
-    if (!deletedLaw) {
-      return res.status(404).json({ message: 'Law not found' });
+    const { id } = req.params;
+    console.log('Delete request received for ID:', id);
+
+    // Validate ID
+    if (!id || isNaN(parseInt(id, 10))) {
+      console.log('Invalid law ID:', id);
+      return res.status(400).json({ 
+        message: 'Invalid law ID',
+        details: 'The provided ID must be a valid number'
+      });
     }
-    res.json({ message: 'Law deleted successfully' });
+
+    const lawId = parseInt(id, 10);
+
+    // First check if the law exists
+    const existingLaw = await Law.findOne({ law_id: lawId });
+    if (!existingLaw) {
+      console.log('No law found with ID:', lawId);
+      return res.status(404).json({ 
+        message: 'Law not found',
+        details: `No law found with ID: ${lawId}`
+      });
+    }
+
+    // Delete the law
+    const result = await Law.deleteOne({ law_id: lawId });
+    console.log('Delete result:', result);
+
+    if (result.deletedCount === 0) {
+      console.log('Failed to delete law with ID:', lawId);
+      return res.status(500).json({ 
+        message: 'Failed to delete law',
+        details: 'The law was found but could not be deleted'
+      });
+    }
+
+    console.log('Successfully deleted law with ID:', lawId);
+    res.json({ 
+      message: 'Law deleted successfully',
+      deletedLawId: lawId,
+      details: `Law with ID ${lawId} has been deleted`
+    });
   } catch (err) {
-    console.error('Error deleting law:', err);
-    res.status(500).send('Server error');
+    console.error('Error in delete operation:', err);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: err.message,
+      details: 'An unexpected error occurred while deleting the law'
+    });
   }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Global error handler:', err);
+  res.status(500).json({
+    message: 'Internal Server Error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
 });
 
 // Start the server
