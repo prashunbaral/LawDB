@@ -129,6 +129,7 @@ export default function AdminPanel() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingLaw) return;
+    console.log(editingLaw);
 
     try {
       // Basic validation
@@ -276,8 +277,8 @@ export default function AdminPanel() {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Manage Laws</h2>
           <div className="space-y-4">
-            {laws.map(law => (
-              <div key={law.law_id} className="border rounded-lg p-4">
+            {laws.map((law,index )=> (
+              <div key={index} className="border rounded-lg p-4">
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="text-lg font-medium text-gray-800">{law.title}</h3>
