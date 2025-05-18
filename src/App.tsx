@@ -6,6 +6,15 @@ import AdminPanel from './components/AdminPanel';
 import LawDetails from './components/LawDetails';
 import Chatbot from './components/Chatbot';
 
+import ConstitutionalLaw from './components/constitutionalLaw';
+import RecentAin from './components/RecentAin';
+import AinBySection from './components/AinBySection';
+import AinOutsideSection from './components/AinOutsideSection';
+import AinByClassification from './components/AinByClassification';
+import Chairman from './components/Chairman';
+import Rulebook from './components/Rulebook';
+import FormationOrders from './components/FormationOrders';
+
 interface LawResult {
   _id: string;
   title: string;
@@ -41,6 +50,10 @@ function SearchPage() {
     { id: 'constitutional', label: 'Constitutional' },
     { id: 'commercial', label: 'Commercial' }
   ];
+
+  // Dropdown open states for "मौजूदा कानून"
+  const [openMaujudaDropdown, setOpenMaujudaDropdown] = useState(false);
+  const [openAinSubmenu, setOpenAinSubmenu] = useState(false);
 
   // Fetch all laws when component mounts
   useEffect(() => {
@@ -115,26 +128,18 @@ function SearchPage() {
   const displayedResults = searchResults.slice(0, displayCount);
   const hasMoreResults = searchResults.length > displayCount;
 
-  const handleDeleteNews = (id: string) => {
-    setNewsItems(newsItems.filter(news => news.id !== id));
-  };
-
-  const handleEditNews = (id: string, updatedTitle: string, updatedDescription: string) => {
-    setNewsItems(newsItems.map(news =>
-      news.id === id
-        ? { ...news, title: updatedTitle, description: updatedDescription }
-        : news
-    ));
-  };
-
   const handleLawClick = (law: LawResult) => {
-    console.log('Clicking law:', law); // Debug log
     if (law.law_id) {
       navigate(`/law/${law.law_id}`);
-    } else {
-      console.error('Law has no law_id:', law);
     }
   };
+
+  // Toggle dropdown handlers for "मौजूदा कानून"
+  const toggleMaujudaDropdown = () => {
+    setOpenMaujudaDropdown(prev => !prev);
+    if (openMaujudaDropdown) setOpenAinSubmenu(false);
+  };
+  const toggleAinSubmenu = () => setOpenAinSubmenu(prev => !prev);
 
   return (
     <div className="min-h-screen bg-white">
@@ -147,7 +152,10 @@ function SearchPage() {
             </div>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex space-x-4">
+            <div className="hidden md:flex space-x-4 items-center relative">
+
+             
+              {/* Original filters */}
               {filters.map(filter => (
                 <button
                   key={filter.id}
@@ -161,6 +169,111 @@ function SearchPage() {
                   {filter.label}
                 </button>
               ))}
+               {/* मौजूदा कानून dropdown */}
+<div className="relative">
+  <button
+    onClick={toggleMaujudaDropdown}
+    className={`flex items-center gap-1 px-4 py-2 font-semibold rounded-md hover:text-blue-600 focus:outline-none ${
+      openMaujudaDropdown ? 'text-blue-600' : 'text-gray-700'
+    }`}
+  >
+    मौजूदा कानून
+    <ChevronDown size={16} />
+  </button>
+
+  {openMaujudaDropdown && (
+    <ul className="absolute top-full left-0 mt-1 w-56 bg-white border rounded-md shadow-lg z-50">
+      <li>
+        <Link
+          to="/laws/constitutional"
+          onClick={() => setOpenMaujudaDropdown(false)}
+          className="block px-4 py-2 hover:bg-gray-100"
+        >
+          संविधान
+        </Link>
+      </li>
+      <li className="relative group">
+        <button
+          onClick={toggleAinSubmenu}
+          className="w-full flex justify-between items-center px-4 py-2 hover:bg-gray-100 rounded cursor-pointer"
+        >
+          ऐन
+          {openAinSubmenu ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+
+        {openAinSubmenu && (
+          <ul className="absolute top-0 left-full mt-0 ml-1 w-56 bg-white border rounded-md shadow-lg z-50">
+            <li>
+              <Link
+                to="/laws/ain/recent"
+                onClick={() => setOpenMaujudaDropdown(false)}
+                className="block px-4 py-2 hover:bg-gray-100"
+              >
+                हालसालैका ऐन
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/laws/ain/by-section"
+                onClick={() => setOpenMaujudaDropdown(false)}
+                className="block px-4 py-2 hover:bg-gray-100"
+              >
+                खण्ड अनुसार
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/laws/ain/outside-section"
+                onClick={() => setOpenMaujudaDropdown(false)}
+                className="block px-4 py-2 hover:bg-gray-100"
+              >
+                खण्ड बाहेकका ऐन
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/laws/ain/by-classification"
+                onClick={() => setOpenMaujudaDropdown(false)}
+                className="block px-4 py-2 hover:bg-gray-100"
+              >
+                वर्गीकरण अनुसारको सूची
+              </Link>
+            </li>
+          </ul>
+        )}
+      </li>
+      <li>
+        <Link
+          to="/laws/chairman"
+          onClick={() => setOpenMaujudaDropdown(false)}
+          className="block px-4 py-2 hover:bg-gray-100"
+        >
+          अध्यक्ष
+        </Link>
+      </li>
+      <li>
+        <Link
+          to="/laws/rulebook"
+          onClick={() => setOpenMaujudaDropdown(false)}
+          className="block px-4 py-2 hover:bg-gray-100"
+        >
+          नियमावली
+        </Link>
+      </li>
+      <li>
+        <Link
+          to="/laws/formation-orders"
+          onClick={() => setOpenMaujudaDropdown(false)}
+          className="block px-4 py-2 hover:bg-gray-100"
+        >
+          (गठन) आदेश
+        </Link>
+      </li>
+    </ul>
+  )}
+</div>
+
+
             </div>
 
             <div className="flex items-center gap-4">
@@ -186,6 +299,124 @@ function SearchPage() {
           {isMenuOpen && (
             <div className="md:hidden mt-4 pb-4">
               <div className="flex flex-col space-y-2">
+                <ul className="pl-4 border-l border-gray-300 mt-2 space-y-1">
+  <li>
+    <Link
+      to="/laws/constitutional"
+      onClick={() => {
+        setIsMenuOpen(false);
+        setOpenMaujudaDropdown(false);
+      }}
+      className="py-1 px-2 hover:bg-gray-100 rounded cursor-pointer block"
+    >
+      संविधान
+    </Link>
+  </li>
+  <li>
+    <button
+      onClick={toggleAinSubmenu}
+      className="w-full flex justify-between items-center py-1 px-2 hover:bg-gray-100 rounded"
+    >
+      ऐन
+      {openAinSubmenu ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+    </button>
+    {openAinSubmenu && (
+      <ul className="pl-4 border-l border-gray-300 mt-1 space-y-1">
+        <li>
+          <Link
+            to="/laws/ain/recent"
+            onClick={() => {
+              setIsMenuOpen(false);
+              setOpenMaujudaDropdown(false);
+              setOpenAinSubmenu(false);
+            }}
+            className="py-1 px-2 hover:bg-gray-100 rounded cursor-pointer block"
+          >
+            हालसालैका ऐन
+          </Link>
+        </li>
+        <li>
+          <Link
+            to="/laws/ain/by-section"
+            onClick={() => {
+              setIsMenuOpen(false);
+              setOpenMaujudaDropdown(false);
+              setOpenAinSubmenu(false);
+            }}
+            className="py-1 px-2 hover:bg-gray-100 rounded cursor-pointer block"
+          >
+            खण्ड अनुसार
+          </Link>
+        </li>
+        <li>
+          <Link
+            to="/laws/ain/outside-section"
+            onClick={() => {
+              setIsMenuOpen(false);
+              setOpenMaujudaDropdown(false);
+              setOpenAinSubmenu(false);
+            }}
+            className="py-1 px-2 hover:bg-gray-100 rounded cursor-pointer block"
+          >
+            खण्ड बाहेकका ऐन
+          </Link>
+        </li>
+        <li>
+          <Link
+            to="/laws/ain/by-classification"
+            onClick={() => {
+              setIsMenuOpen(false);
+              setOpenMaujudaDropdown(false);
+              setOpenAinSubmenu(false);
+            }}
+            className="py-1 px-2 hover:bg-gray-100 rounded cursor-pointer block"
+          >
+            वर्गीकरण अनुसारको सूची
+          </Link>
+        </li>
+      </ul>
+    )}
+  </li>
+  <li>
+    <Link
+      to="/laws/chairman"
+      onClick={() => {
+        setIsMenuOpen(false);
+        setOpenMaujudaDropdown(false);
+      }}
+      className="py-1 px-2 hover:bg-gray-100 rounded cursor-pointer block"
+    >
+      अध्यक्ष
+    </Link>
+  </li>
+  <li>
+    <Link
+      to="/laws/rulebook"
+      onClick={() => {
+        setIsMenuOpen(false);
+        setOpenMaujudaDropdown(false);
+      }}
+      className="py-1 px-2 hover:bg-gray-100 rounded cursor-pointer block"
+    >
+      नियमावली
+    </Link>
+  </li>
+  <li>
+    <Link
+      to="/laws/formation-orders"
+      onClick={() => {
+        setIsMenuOpen(false);
+        setOpenMaujudaDropdown(false);
+      }}
+      className="py-1 px-2 hover:bg-gray-100 rounded cursor-pointer block"
+    >
+      (गठन) आदेश
+    </Link>
+  </li>
+</ul>
+
+
+                {/* Original filters */}
                 {filters.map(filter => (
                   <button
                     key={filter.id}
@@ -202,6 +433,7 @@ function SearchPage() {
                     {filter.label}
                   </button>
                 ))}
+
                 <Link
                   to="/admin"
                   className="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition-colors px-4 py-2"
@@ -322,6 +554,16 @@ function App() {
         <Route path="/" element={<SearchPage />} />
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/law/:lawId" element={<LawDetails />} />
+
+
+        <Route path="/laws/constitutional" element={<ConstitutionalLaw />} />
+        <Route path="/laws/ain/recent" element={<RecentAin />} />
+        <Route path="/laws/ain/by-section" element={<AinBySection />} />
+        <Route path="/laws/ain/outside-section" element={<AinOutsideSection />} />
+        <Route path="/laws/ain/by-classification" element={<AinByClassification />} />
+        <Route path="/laws/chairman" element={<Chairman />} />
+        <Route path="/laws/rulebook" element={<Rulebook />} />
+        <Route path="/laws/formation-orders" element={<FormationOrders />} />
       </Routes>
       <Chatbot />
     </BrowserRouter>
