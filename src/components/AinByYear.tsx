@@ -14,7 +14,7 @@ interface Law {
   law_id: number;
 }
 
-const AinOutsideSection = () => {
+const AinByYear = () => {
   const [laws, setLaws] = useState<Law[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -25,7 +25,7 @@ const AinOutsideSection = () => {
         const response = await axios.get('http://localhost:5000/api/laws', {
           params: {
             type: 'ऐन',
-            subType: 'खण्ड बाहेकका ऐन'
+            subType: 'वर्ष अनुसार'
           }
         });
         setLaws(response.data);
@@ -43,23 +43,14 @@ const AinOutsideSection = () => {
     <div className="max-w-6xl mx-auto px-4 py-8">
       <BackButton />
 
-      <h1 className="text-3xl font-bold mb-6">खण्ड बाहेकका ऐनहरू</h1>
+      <h1 className="text-3xl font-bold mb-6">वर्ष अनुसारका ऐनहरू</h1>
       <p>
-        यी ऐनहरू कानूनका विशेष क्षेत्रहरू वा विशिष्ट विषयहरू समेट्छन् जसलाई खण्डमा राख्न नमिल्ने स्थिति हुन्छ। उदाहरणहरू:
-      </p>
-      <ul className="list-disc pl-6 space-y-2">
-        <li>नेपाल सरकार गठन सम्बन्धी ऐनहरू</li>
-        <li>सुरक्षा सम्बन्धी ऐनहरू</li>
-        <li>प्राकृतिक स्रोत संरक्षण ऐनहरू</li>
-        <li>महत्त्वपूर्ण राष्ट्रिय परियोजना ऐनहरू</li>
-      </ul>
-      <p>
-        यी ऐनहरू प्रायः विशिष्ट परिस्थिति र आवश्यकताका लागि तयार गरिन्छन्।
+        यी ऐनहरू उनीहरूको पारित भएको वर्ष अनुसार वर्गीकृत गरिएका छन्। यसले कानूनको ऐतिहासिक विकास र परिवर्तनलाई सम्झन सजिलो बनाउँछ।
       </p>
 
       {/* Laws Section */}
       <div className="mt-12">
-        <h2 className="text-2xl font-semibold mb-6">खण्ड बाहेकका ऐनहरू</h2>
+        <h2 className="text-2xl font-semibold mb-6">वर्ष अनुसारका ऐनहरू</h2>
         
         {isLoading ? (
           <div className="text-center text-gray-600">लोड हुँदैछ...</div>
@@ -91,7 +82,7 @@ const AinOutsideSection = () => {
           </div>
         ) : (
           <div className="text-center text-gray-600">
-            कुनै खण्ड बाहेकका ऐन भेटिएन
+            कुनै वर्ष अनुसारका ऐन भेटिएन
           </div>
         )}
       </div>
@@ -99,4 +90,4 @@ const AinOutsideSection = () => {
   );
 };
 
-export default AinOutsideSection;
+export default AinByYear; 

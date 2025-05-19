@@ -8,7 +8,12 @@ interface Law {
   title: string;
   description: string;
   category: string;
+  type?: {
+    mainType: string;
+    subType: string | null;
+  };
   law_id: number;
+  createdAt: string;
 }
 
 interface ApiError {
@@ -25,12 +30,19 @@ export default function AdminPanel() {
   const [editingLaw, setEditingLaw] = useState<Law | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
   const [newLaw, setNewLaw] = useState<Law>({
     id: '',
     title: '',
     description: '',
     category: 'civil',
-    law_id: 0
+    type: {
+      mainType: 'मौजूदा कानून',
+      subType: null
+    },
+    law_id: 0,
+    createdAt: new Date().toISOString()
   });
   const [showEditOverlay, setShowEditOverlay] = useState(false);
 
@@ -67,12 +79,23 @@ export default function AdminPanel() {
     e.preventDefault();
     if (!newLaw.title || !newLaw.description) return;
   
-    console.log('Adding new law:', newLaw);  // Log the request body
+    console.log('Adding new law:', newLaw);
   
     try {
       const response = await axios.post('http://localhost:5000/api/laws', newLaw);
       setLaws([...laws, response.data]);
-      setNewLaw({ id: '', title: '', description: '', category: 'civil', law_id: 0 }); // Reset form
+      setNewLaw({ 
+        id: '', 
+        title: '', 
+        description: '', 
+        category: 'civil', 
+        type: {
+          mainType: 'मौजूदा कानून',
+          subType: null
+        },
+        law_id: 0, 
+        createdAt: new Date().toISOString() 
+      }); // Reset form
     } catch (error) {
       console.error('Failed to add law:', error);
     }
@@ -169,6 +192,148 @@ export default function AdminPanel() {
     }
   };
 
+  // Add this function after fetchLaws
+  const filterLaws = (laws: Law[]) => {
+    let filtered = [...laws];
+    
+    // Apply category filter
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(law => law.category === categoryFilter);
+    }
+    
+    // Apply date filter
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const lastWeek = new Date(today);
+      lastWeek.setDate(lastWeek.getDate() - 7);
+      const lastMonth = new Date(today);
+      lastMonth.setMonth(lastMonth.getMonth() - 1);
+      
+      filtered = filtered.filter(law => {
+        const lawDate = new Date(law.createdAt);
+        switch (dateFilter) {
+          case 'today':
+            return lawDate >= today;
+          case 'yesterday':
+            return lawDate >= yesterday && lawDate < today;
+          case 'lastWeek':
+            return lawDate >= lastWeek;
+          case 'lastMonth':
+            return lawDate >= lastMonth;
+          default:
+            return true;
+        }
+      });
+    }
+    
+    return filtered;
+  };
+
+  // Add this function to handle type changes
+  const handleTypeChange = (mainType: string, subType: string | null = null) => {
+    setNewLaw(prev => ({
+      ...prev,
+      type: {
+        mainType,
+        subType: mainType === 'ऐन' ? subType : null
+      }
+    }));
+  };
+
+  // Add this function to safely get type display
+  const getTypeDisplay = (law: Law) => {
+    if (!law.type) return 'मौजूदा कानून'; // Default type for existing laws
+    return law.type.mainType + (law.type.subType ? ` - ${law.type.subType}` : '');
+  };
+
+  // Add migration function
+  const handleMigrateTypes = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      console.log('Starting migration...');
+      
+      const response = await axios.post('http://localhost:5000/api/migrate-types', {}, {
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      console.log('Migration response:', response.data);
+      
+      if (response.data.errorCount > 0) {
+        alert(`Migration completed with some errors. Updated ${response.data.updatedCount} laws, ${response.data.errorCount} errors, ${response.data.skippedCount} skipped.`);
+      } else {
+        alert(`Migration completed successfully. Updated ${response.data.updatedCount} laws, ${response.data.skippedCount} skipped.`);
+      }
+      
+      // Refresh the laws list after migration
+      await fetchLaws();
+    } catch (error: any) {
+      console.error('Migration error:', error);
+      let errorMessage = 'Migration failed';
+      
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        errorMessage = error.response.data?.message || error.response.data?.error || error.message;
+        setError(errorMessage);
+      } else if (error.request) {
+        // The request was made but no response was received
+        errorMessage = 'No response from server. Please check if the server is running.';
+        setError(errorMessage);
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        errorMessage = error.message;
+        setError(errorMessage);
+      }
+      
+      alert(`Migration failed: ${errorMessage}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Add reset database handler
+  const handleResetDatabase = async () => {
+    if (!window.confirm('Are you sure you want to reset the database? This will delete all existing laws and add sample data.')) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      console.log('Starting database reset...');
+      
+      const response = await axios.post('http://localhost:5000/api/reset-database');
+      console.log('Reset response:', response.data);
+      
+      alert(`Database reset successful. Added ${response.data.sampleLawsAdded} sample laws.`);
+      
+      // Refresh the laws list
+      await fetchLaws();
+    } catch (error: any) {
+      console.error('Reset error:', error);
+      let errorMessage = 'Database reset failed';
+      
+      if (error.response) {
+        errorMessage = error.response.data?.message || error.response.data?.error || error.message;
+      } else if (error.request) {
+        errorMessage = 'No response from server. Please check if the server is running.';
+      } else {
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
+      alert(`Database reset failed: ${errorMessage}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center">
@@ -215,7 +380,21 @@ export default function AdminPanel() {
             <ArrowLeft size={20} />
             Back to Search
           </Link>
-          <h1 className="text-2xl font-bold text-gray-800">Admin Panel</h1>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleResetDatabase}
+              className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+            >
+              Reset Database
+            </button>
+            <button
+              onClick={handleMigrateTypes}
+              className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600"
+            >
+              Migrate Types
+            </button>
+            <h1 className="text-2xl font-bold text-gray-800">Admin Panel</h1>
+          </div>
         </div>
 
         {error && (
@@ -229,6 +408,42 @@ export default function AdminPanel() {
             Loading...
           </div>
         )}
+
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-gray-800">Filters</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              >
+                <option value="all">All Categories</option>
+                <option value="civil">Civil Laws</option>
+                <option value="criminal">Criminal Laws</option>
+                <option value="constitutional">Constitutional</option>
+                <option value="commercial">Commercial</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Date Created</label>
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="lastWeek">Last 7 Days</option>
+                <option value="lastMonth">Last 30 Days</option>
+              </select>
+            </div>
+          </div>
+        </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Add New Law</h2>
@@ -264,6 +479,37 @@ export default function AdminPanel() {
                 <option value="commercial">Commercial</option>
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Type</label>
+              <div className="space-y-2">
+                <select
+                  value={newLaw.type?.mainType || ''}
+                  onChange={(e) => handleTypeChange(e.target.value)}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="मौजूदा कानून">मौजूदा कानून</option>
+                  <option value="संविधान">संविधान</option>
+                  <option value="ऐन">ऐन</option>
+                  <option value="अध्यक्ष">अध्यक्ष</option>
+                  <option value="नियमावली">नियमावली</option>
+                  <option value="(गठन) आदेश">(गठन) आदेश</option>
+                </select>
+
+                {newLaw.type?.mainType === 'ऐन' && (
+                  <select
+                    value={newLaw.type?.subType || ''}
+                    onChange={(e) => handleTypeChange('ऐन', e.target.value)}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                  >
+                    <option value="">Select Subtype</option>
+                    <option value="हालसालैका ऐन">हालसालैका ऐन</option>
+                    <option value="खण्ड अनुसार">खण्ड अनुसार</option>
+                    <option value="खण्ड बाहेकका ऐन">खण्ड बाहेकका ऐन</option>
+                    <option value="वर्गीकरण अनुसारको सूची">वर्गीकरण अनुसारको सूची</option>
+                  </select>
+                )}
+              </div>
+            </div>
             <button
               type="submit"
               className="flex items-center gap-2 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700"
@@ -277,15 +523,23 @@ export default function AdminPanel() {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Manage Laws</h2>
           <div className="space-y-4">
-            {laws.map((law,index )=> (
+            {filterLaws(laws).map((law, index) => (
               <div key={index} className="border rounded-lg p-4">
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="text-lg font-medium text-gray-800">{law.title}</h3>
                     <p className="text-gray-600 mt-1">{law.description}</p>
-                    <span className="inline-block mt-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                      {law.category}
-                    </span>
+                    <div className="flex gap-2 mt-2">
+                      <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                        {law.category}
+                      </span>
+                      <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                        {getTypeDisplay(law)}
+                      </span>
+                      <span className="inline-block px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">
+                        {new Date(law.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button

@@ -10,6 +10,16 @@ const GREETINGS = [
   'नमस्ते', 'नमस्कार', 'हाइ', 'हेलो'
 ];
 
+// Add mapping for Nepali types/subtypes and their routes
+const NEPALI_TYPE_ROUTE_MAP: Record<string, string> = {
+  'नियमावली': '/laws/rulebook',
+  'अध्यक्ष': '/laws/chairman',
+  'संविधान': '/laws/constitutional',
+  'ऐन': '/laws/ain',
+  '(गठन) आदेश': '/laws/formation-orders',
+  // Add more as needed
+};
+
 function isGreeting(text: string): boolean {
   const lowerText = text.toLowerCase().trim();
   return GREETINGS.some(greeting => lowerText === greeting);
@@ -19,6 +29,14 @@ function extractCategory(prompt: string): string | null {
   const lower = prompt.toLowerCase();
   for (const cat of CATEGORIES) {
     if (lower.includes(cat)) return cat;
+  }
+  return null;
+}
+
+function extractNepaliType(prompt: string): string | null {
+  // Check for exact match or inclusion of Nepali type keywords
+  for (const type in NEPALI_TYPE_ROUTE_MAP) {
+    if (prompt.includes(type)) return type;
   }
   return null;
 }
@@ -90,36 +108,49 @@ export default function Chatbot() {
         return;
       }
 
-      // Extract category and keywords
-      const category = extractCategory(userMsg.text);
-      const keywords = extractLawKeywords(userMsg.text);
+      // Extract Nepali type
+      const nepaliType = extractNepaliType(userMsg.text);
       let relevantLaws = [];
       let responseText = '';
 
-      // First try category search
-      if (category) {
-        console.log('Searching by category:', category);
-        relevantLaws = await searchLaws('', category);
+      if (nepaliType) {
+        // Fetch laws by Nepali type
+        relevantLaws = await searchLaws('', undefined);
+        // Filter client-side for exact type match (in case backend doesn't support direct Nepali type param)
+        relevantLaws = relevantLaws.filter((law: any) => law.type?.mainType === nepaliType);
         if (relevantLaws.length > 0) {
-          responseText = `Here are the ${category} laws in our database:`;
+          responseText = `यहाँ ${nepaliType} सम्बन्धी कानुनहरू छन्:`;
         }
       }
 
-      // If no results from category search, try keyword search
-      if (relevantLaws.length === 0 && keywords.length > 0) {
-        console.log('Searching by keywords:', keywords);
-        relevantLaws = await searchLaws(keywords.join(' '));
-        if (relevantLaws.length > 0) {
-          responseText = `Here are the laws related to ${keywords.join(', ')}:`;
+      // If no results from Nepali type search, try category search
+      if (relevantLaws.length === 0 && !nepaliType) {
+        // Extract category and keywords
+        const category = extractCategory(userMsg.text);
+        const keywords = extractLawKeywords(userMsg.text);
+        // First try category search
+        if (category) {
+          console.log('Searching by category:', category);
+          relevantLaws = await searchLaws('', category);
+          if (relevantLaws.length > 0) {
+            responseText = `Here are the ${category} laws in our database:`;
+          }
         }
-      }
-
-      // If still no results, try searching with the original query
-      if (relevantLaws.length === 0) {
-        console.log('Searching with original query:', userMsg.text);
-        relevantLaws = await searchLaws(userMsg.text);
-        if (relevantLaws.length > 0) {
-          responseText = `Here are the laws related to your query:`;
+        // If no results from category search, try keyword search
+        if (relevantLaws.length === 0 && keywords.length > 0) {
+          console.log('Searching by keywords:', keywords);
+          relevantLaws = await searchLaws(keywords.join(' '));
+          if (relevantLaws.length > 0) {
+            responseText = `Here are the laws related to ${keywords.join(', ')}:`;
+          }
+        }
+        // If still no results, try searching with the original query
+        if (relevantLaws.length === 0) {
+          console.log('Searching with original query:', userMsg.text);
+          relevantLaws = await searchLaws(userMsg.text);
+          if (relevantLaws.length > 0) {
+            responseText = `Here are the laws related to your query:`;
+          }
         }
       }
 
@@ -150,9 +181,16 @@ export default function Chatbot() {
     }
   };
 
-  const handleLawClick = (lawId: number) => {
-    setOpen(false);
-    navigate(`/law/${lawId}`);
+  const handleLawClick = (law: any) => {
+    // If law.type.mainType is a known Nepali type, use mapped route
+    const nepaliType = law.type?.mainType;
+    if (nepaliType && NEPALI_TYPE_ROUTE_MAP[nepaliType]) {
+      setOpen(false);
+      navigate(NEPALI_TYPE_ROUTE_MAP[nepaliType]);
+    } else {
+      setOpen(false);
+      navigate(`/law/${law.law_id}`);
+    }
   };
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -245,7 +283,7 @@ export default function Chatbot() {
                       {msg.laws.map(law => (
                         <li key={law.law_id}>
                           <button
-                            onClick={() => handleLawClick(law.law_id)}
+                            onClick={() => handleLawClick(law)}
                             style={{
                               background: 'none',
                               border: 'none',

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, UserCog, Scale, Menu, ChevronDown, ChevronUp } from 'lucide-react';
 import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import AdminPanel from './components/AdminPanel';
+import AdminPanel from './components/AdminPanel.tsx';
 import LawDetails from './components/LawDetails';
 import Chatbot from './components/Chatbot';
 

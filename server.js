@@ -12,6 +12,12 @@ const port = 5000;
 app.use(cors());
 app.use(bodyParser.json());
 
+// Add request logging middleware
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
+
 // MongoDB connection with enhanced options
 mongoose.connect('mongodb+srv://pram15karki:DSSUJttfiBLkY96b@cluster0.svtnj.mongodb.net/nepal_law', {
   useNewUrlParser: true,
@@ -48,6 +54,22 @@ const lawSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: ['civil', 'criminal', 'constitutional', 'commercial']
+  },
+  type: {
+    mainType: {
+      type: String,
+      required: true,
+      enum: ['मौजूदा कानून', 'संविधान', 'ऐन', 'अध्यक्ष', 'नियमावली', '(गठन) आदेश']
+    },
+    subType: {
+      type: String,
+      enum: ['हालसालैका ऐन', 'खण्ड अनुसार', 'खण्ड बाहेकका ऐन', 'वर्गीकरण अनुसारको सूची'],
+      default: null
+    }
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
   }
 }, { 
   collection: 'laws',
@@ -77,10 +99,17 @@ const getNextLawId = async () => {
 };
 
 // Function to query laws based on category and search term
-const getLaws = async (query, category) => {
+const getLaws = async (query, category, type) => {
   try {
     // If category is "all", we skip filtering by category
-    const filter = category && category !== 'all' ? { category: new RegExp(category, 'i') } : {};
+    const filter = {};
+    if (category && category !== 'all') {
+      filter.category = new RegExp(category, 'i');
+    }
+    if (type && type !== 'all') {
+      filter.type = type;
+    }
+    
     const laws = await Law.find({
       ...filter,
       $or: [
@@ -115,9 +144,11 @@ app.get('/api/laws/:id', async (req, res) => {
 
 // Get all laws with optional search and category filter
 app.get('/api/laws', async (req, res) => {
-    const { query = "", category = "" } = req.query;
+    const { query = "", category = "", type = "", subType = "" } = req.query;
     console.log('Received query:', query);
     console.log('Received category:', category);
+    console.log('Received type:', type);
+    console.log('Received subType:', subType);
   
     try {
       let searchQuery = {};
@@ -125,6 +156,14 @@ app.get('/api/laws', async (req, res) => {
       // If there's a category filter, add it to the search query
       if (category && category !== 'all') {
         searchQuery.category = category.toLowerCase();
+      }
+      
+      // If there's a type filter, add it to the search query
+      if (type) {
+        searchQuery['type.mainType'] = type;
+        if (subType) {
+          searchQuery['type.subType'] = subType;
+        }
       }
       
       // If there's a search query, search in both title and description
@@ -150,10 +189,10 @@ app.get('/api/laws', async (req, res) => {
 
 // Create a new law
 app.post('/api/laws', async (req, res) => {
-  const { title, description, category } = req.body;
+  const { title, description, category, type } = req.body;
 
-  if (!title || !description || !category) {
-    return res.status(400).json({ message: 'All fields are required' });
+  if (!title || !description || !category || !type?.mainType) {
+    return res.status(400).json({ message: 'All required fields are missing' });
   }
 
   try {
@@ -161,7 +200,7 @@ app.post('/api/laws', async (req, res) => {
     const law_id = await getNextLawId();
 
     // Create a new law with the incremented law_id
-    const newLaw = new Law({ law_id, title, description, category });
+    const newLaw = new Law({ law_id, title, description, category, type });
     await newLaw.save();
     res.status(201).json(newLaw);
   } catch (err) {
@@ -174,7 +213,7 @@ app.post('/api/laws', async (req, res) => {
 app.put('/api/laws/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, category } = req.body;
+    const { title, description, category, type } = req.body;
 
     // Convert id to number
     const lawId = parseInt(id, 10);
@@ -192,6 +231,7 @@ app.put('/api/laws/:id', async (req, res) => {
     existingLaw.title = title;
     existingLaw.description = description;
     existingLaw.category = category;
+    existingLaw.type = type;
 
     // Save the updated law
     const updatedLaw = await existingLaw.save();
@@ -258,6 +298,173 @@ app.delete('/api/laws/:id', async (req, res) => {
   }
 });
 
+// Add this endpoint to migrate existing laws - place it BEFORE any other route handlers
+app.post('/api/migrate-types', async (req, res) => {
+  console.log('Migration endpoint hit');
+  try {
+    console.log('Starting migration...');
+    
+    // Get the raw MongoDB collection
+    const collection = mongoose.connection.collection('laws');
+    
+    // Find all laws that need migration
+    const laws = await collection.find({ type: { $exists: false } }).toArray();
+    console.log(`Found ${laws.length} laws to migrate`);
+    
+    let successCount = 0;
+    let errorCount = 0;
+    let skippedCount = 0;
+    
+    // Process each law
+    for (const law of laws) {
+      try {
+        console.log(`Processing law ${law.law_id} with category: ${law.category}`);
+        
+        let newCategory = law.category;
+        
+        // Map 'corporate' to 'commercial' if needed
+        if (law.category === 'corporate') {
+          console.log(`Mapping category from 'corporate' to 'commercial' for law ${law.law_id}`);
+          newCategory = 'commercial';
+        }
+        
+        // Ensure category is one of the allowed values
+        if (!['civil', 'criminal', 'constitutional', 'commercial'].includes(newCategory)) {
+          console.log(`Invalid category '${newCategory}' for law ${law.law_id}, defaulting to 'civil'`);
+          newCategory = 'civil';
+        }
+
+        // Use MongoDB's native updateOne operation
+        const result = await collection.updateOne(
+          { _id: law._id },
+          { 
+            $set: {
+              category: newCategory,
+              type: {
+                mainType: 'मौजूदा कानून',
+                subType: null
+              }
+            }
+          }
+        );
+
+        if (result.modifiedCount > 0) {
+          console.log(`Successfully migrated law ${law.law_id}`);
+          successCount++;
+        } else if (result.matchedCount > 0) {
+          console.log(`No changes needed for law ${law.law_id}`);
+          skippedCount++;
+        } else {
+          console.log(`Failed to find law ${law.law_id} for update`);
+          errorCount++;
+        }
+      } catch (saveError) {
+        console.error(`Error updating law ${law.law_id}:`, saveError);
+        errorCount++;
+        // Continue with other laws even if one fails
+        continue;
+      }
+    }
+    
+    // After migration, verify the changes
+    const updatedLaws = await collection.find({ type: { $exists: true } }).toArray();
+    console.log(`Verification: ${updatedLaws.length} laws now have type field`);
+    
+    console.log('Migration completed successfully');
+    res.json({ 
+      message: 'Migration completed successfully',
+      updatedCount: successCount,
+      skippedCount: skippedCount,
+      errorCount: errorCount,
+      totalMigrated: updatedLaws.length
+    });
+  } catch (err) {
+    console.error('Migration error:', err);
+    res.status(500).json({ 
+      message: 'Migration failed',
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+});
+
+// Add this endpoint right after the MongoDB connection setup and before other routes
+app.post('/api/reset-database', async (req, res) => {
+  console.log('Reset database endpoint hit');
+  try {
+    // Get the raw MongoDB collection
+    const collection = mongoose.connection.collection('laws');
+    
+    // Clear all documents from the collection
+    await collection.deleteMany({});
+    console.log('Database cleared successfully');
+
+    // Add sample laws with correct structure
+    const sampleLaws = [
+      {
+        law_id: 1,
+        title: "Civil Code of Nepal",
+        description: "The main civil code governing civil matters in Nepal",
+        category: "civil",
+        type: {
+          mainType: "मौजूदा कानून",
+          subType: null
+        },
+        createdAt: new Date()
+      },
+      {
+        law_id: 2,
+        title: "Criminal Code of Nepal",
+        description: "The main criminal code governing criminal matters in Nepal",
+        category: "criminal",
+        type: {
+          mainType: "मौजूदा कानून",
+          subType: null
+        },
+        createdAt: new Date()
+      },
+      {
+        law_id: 3,
+        title: "Constitution of Nepal",
+        description: "The supreme law of Nepal",
+        category: "constitutional",
+        type: {
+          mainType: "संविधान",
+          subType: null
+        },
+        createdAt: new Date()
+      },
+      {
+        law_id: 4,
+        title: "Commercial Law of Nepal",
+        description: "Laws governing commercial activities in Nepal",
+        category: "commercial",
+        type: {
+          mainType: "मौजूदा कानून",
+          subType: null
+        },
+        createdAt: new Date()
+      }
+    ];
+
+    // Insert sample laws
+    const result = await collection.insertMany(sampleLaws);
+    console.log(`Added ${result.insertedCount} sample laws`);
+
+    res.json({
+      message: 'Database reset successful',
+      cleared: true,
+      sampleLawsAdded: result.insertedCount
+    });
+  } catch (err) {
+    console.error('Database reset error:', err);
+    res.status(500).json({
+      message: 'Database reset failed',
+      error: err.message
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Global error handler:', err);
@@ -270,4 +477,10 @@ app.use((err, req, res, next) => {
 // Start the server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+  console.log('Available routes:');
+  console.log('- POST /api/migrate-types');
+  console.log('- GET /api/laws');
+  console.log('- POST /api/laws');
+  console.log('- PUT /api/laws/:id');
+  console.log('- DELETE /api/laws/:id');
 });
